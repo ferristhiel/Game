@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Monster Hunter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      overflow: hidden;
+    }
+    h1, h3 {
+      margin-top: 10px;
+      text-align: center;
+    }
+    #gameArea {
+      position: relative;
+      width: 100vw;
+      height: 90vh;
+      border: 2px solid #fff;
+      margin: 20px auto;
+      background: #222;
+      overflow: hidden;
+    }
+    .monster {
+      width: 128px;
+      height: 96px;
+      background-image: url("monster.jpeg");
+      background-size: contain;
+      background-repeat: no-repeat;
+      position: absolute;
+      cursor: pointer;
+    }
+    #hud {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 1.2rem;
+      display: none;
+    }
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      /* Hintergrundbild nur für Main Menu */
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+    #introOverlay {
+      background: black; /* Intro schwarzer Hintergrund */
+    }
+    #introVideo {
+      width: 80vw;
+      max-width: 800px;
+      max-height: 45vh;
+      display: none;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(255,255,255,0.5);
+    }
+    .hidden {
+      display: none !important;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 18px;
+      background-color: #333;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    button:hover {
+      background-color: #555;
+    }
+    #gameMessage {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      font-weight: bold;
+      z-index: 20;
+      display: none;
+    }
+    .win {
+      color: limegreen;
+    }
+    .lose {
+      color: red;
+    }
+    .endOptions {
+      display: none;
+      position: absolute;
+      top: 60%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Intro Overlay -->
+  <div id="introOverlay" class="overlay">
+    <button id="IntroBtn">Intro starten</button>
+    <video id="introVideo" controls>
+      <source src="ftgames-intro.mp4" type="video/mp4" />
+      Dein Browser unterstützt keine Videos.
+    </video>
+  </div>  
+
+  <!-- Startmenü -->
+  <div id="mainMenu" class="overlay hidden" style="background-image: url('MontserHunter-Home.png'); z-index: 50;">
+    <button onclick="showDifficulty()">Spiel starten</button>
+    <button onclick="showOptions()">Optionen</button>
+    <button onclick="alert('Spiel wird geschlossen.')">Verlassen</button>
+  </div>
+
+  <!-- Schwierigkeitsauswahl -->
+  <div id="difficultyMenu" class="overlay hidden" style="z-index: 60;">
+    <h2>Schwierigkeit wählen:</h2>
+    <button onclick="startGame('Easy')">Easy</button>
+    <button onclick="startGame('Mittel')">Mittel</button>
+    <button onclick="startGame('Schwer')">Schwer</button>
+  </div>
+
+  <!-- Optionsmenü -->
+  <div id="optionsMenu" class="overlay hidden" style="z-index: 60;">
+    <h2>Optionen</h2>
+    <button onclick="toggleSound()" id="soundToggle">Ton: An</button>
+    <button onclick="toggleFullscreen()">Vollbild</button>
+    <button onclick="alert('Anmelden/Registrieren wird später hinzugefügt.')">Anmelden/Registrieren</button>
+    <button onclick="goBackToMainMenu()">Zurück</button>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    Score: <span id="score">0</span> | Leben: <span id="lives">3</span>
+  </div>
+
+  <!-- Spielbereich -->
+  <div id="gameArea"></div>
+
+  <!-- Nachricht -->
+  <div id="gameMessage"></div>
+
+  <!-- Optionen bei Game Over / Win -->
+  <div id="endOptions" class="endOptions">
+    <button onclick="restartSameMode()">Neustarten</button>
+    <button onclick="switchMode()">Spielmodi wechseln</button>
+  </div>
+
+  <script>
+    const gameArea = document.getElementById("gameArea");
+    const scoreEl = document.getElementById("score");
+    const livesEl = document.getElementById("lives");
+    const hud = document.getElementById("hud");
+    const mainMenu = document.getElementById("mainMenu");
+    const difficultyMenu = document.getElementById("difficultyMenu");
+    const gameMessage = document.getElementById("gameMessage");
+    const endOptions = document.getElementById("endOptions");
+    const optionsMenu = document.getElementById("optionsMenu");
+    const soundToggle = document.getElementById("soundToggle");
+
+    const introOverlay = document.getElementById("introOverlay");
+    const introBtn = document.getElementById("IntroBtn");
+    const introVideo = document.getElementById("introVideo");
+
+    let score = 0;
+    let lives = 3;
+    let goal = 50;
+    let gameRunning = false;
+    let gameInterval;
+    let lastDifficulty = "Easy";
+    let soundOn = true;
+
+    // Intro starten Button
+    introBtn.addEventListener("click", () => {
+      introBtn.style.display = "none";
+      introVideo.style.display = "block";
+      introVideo.play();
+    });
+
+    // Wenn Intro Video fertig ist
+    introVideo.addEventListener("ended", () => {
+      // Intro Overlay komplett verstecken
+      introOverlay.style.display = "none";
+      // Main Menü zeigen
+      mainMenu.classList.remove("hidden");
+    });
+
+    // Menüfunktionen
+    function showDifficulty() {
+      mainMenu.classList.add("hidden");
+      difficultyMenu.classList.remove("hidden");
+    }
+
+    function showOptions() {
+      mainMenu.classList.add("hidden");
+      optionsMenu.classList.remove("hidden");
+    }
+
+    function goBackToMainMenu() {
+      optionsMenu.classList.add("hidden");
+      mainMenu.classList.remove("hidden");
+    }
+
+    function toggleSound() {
+      soundOn = !soundOn;
+      soundToggle.textContent = soundOn ? "Ton: An" : "Ton: Aus";
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    function startGame(difficulty) {
+      lastDifficulty = difficulty;
+      if (difficulty === "Easy") {
+        lives = 5;
+        goal = 50;
+      } else if (difficulty === "Mittel") {
+        lives = 3;
+        goal = 100;
+      } else if (difficulty === "Schwer") {
+        lives = 3;
+        goal = 200;
+      }
+
+      difficultyMenu.classList.add("hidden");
+      hud.style.display = "block";
+      gameArea.innerHTML = "";
+      gameMessage.style.display = "none";
+      endOptions.style.display = "none";
+
+      score = 0;
+      gameRunning = true;
+      scoreEl.textContent = score;
+      livesEl.textContent = lives;
+
+      gameInterval = setInterval(spawnMonster, 1000);
+    }
+
+    function restartSameMode() {
+      startGame(lastDifficulty);
+    }
+
+    function switchMode() {
+      endOptions.style.display = "none";
+      gameMessage.style.display = "none";
+      difficultyMenu.classList.remove("hidden");
+      hud.style.display = "none";
+    }
+
+    function randomPosition(size) {
+      const x = Math.random() * (window.innerWidth - size);
+      const y = Math.random() * (window.innerHeight - size - 100);
+      return { x, y };
+    }
+
+    function spawnMonster() {
+      if (!gameRunning) return;
+
+      const monster = document.createElement("div");
+      monster.classList.add("monster");
+
+      const { x, y } = randomPosition(128);
+      monster.style.left = `${x}px`;
+      monster.style.top = `${y}px`;
+
+      gameArea.appendChild(monster);
+
+      const despawnTime = setTimeout(() => {
+        if (monster.parentElement) {
+          monster.remove();
+          loseLife();
+        }
+      }, 1200);
+
+      monster.addEventListener("click", () => {
+        clearTimeout(despawnTime);
+        monster.remove();
+        score++;
+        scoreEl.textContent = score;
+        if (score >= goal) endGame(true);
+      });
+    }
+
+    function loseLife() {
+      if (!gameRunning) return;
+      lives--;
+      livesEl.textContent = lives;
+      if (lives <= 0) endGame(false);
+    }
+
+    function endGame(win) {
+      clearInterval(gameInterval);
+      gameRunning = false;
+      gameMessage.style.display = "block";
+      endOptions.style.display = "flex";
+      if (win) {
+        gameMessage.textContent = "Du hast GEWONNEN!";
+        gameMessage.className = "win";
+      } else {
+        gameMessage.textContent = "Du hast VERLOREN!";
+        gameMessage.className = "lose";
+      }
+    }
+  </script>
+
+</body>
+</html>
